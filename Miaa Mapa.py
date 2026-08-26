@@ -289,7 +289,20 @@ st.markdown("""
 
 st.title("🗺️ Monitoreo Operativo: Colonias, Pozos e Incidencias")
 
-m = folium.Map(location=[21.8853, -102.2916], zoom_start=12, tiles='CartoDB dark_matter')
+m = folium.Map(location=[21.8853, -102.2916], zoom_start=12, tiles=None)
+
+# Integración de la capa CartoDB Dark con tu API Key y Pantalla Completa
+folium.TileLayer(
+    tiles="https://{s}.basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}.png?key=PON_AQUI_TU_API_KEY",
+    name="Vista Nocturna",
+    attr='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+    subdomains="abcd",
+    max_zoom=20,
+    overlay=False,
+    control=True
+).add_to(m)
+
+Fullscreen().add_to(m)
 
 ver_colonias = True
 ver_pozos = True
@@ -336,7 +349,7 @@ if ver_colonias:
                             try:
                                 val_str = str(afectacion_col).replace('%', '').strip()
                                 val_f = float(val_str)
-                                suma_afec += val_f  # ⚠️ Suma acumulativa para el tooltip
+                                suma_afec += val_f  
                             except:
                                 pass
             
