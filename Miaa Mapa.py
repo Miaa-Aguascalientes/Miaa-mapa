@@ -54,11 +54,15 @@ def cargar_sectores_poligonos():
         if conn:
             conn.close()
 
-# Crear mapa centrado en Aguascalientes
+# Tu API Key de CartoDB (puedes reemplazar el texto o llamarla desde st.secrets si la guardaste ahí)
+CARTODB_API_KEY = "AQUÍ_TU_API_KEY"  # O usa st.secrets["carto"]["api_key"] si la tienes en secrets.toml
+
+# Crear mapa centrado en Aguascalientes con CartoDB Dark Matter y la API Key integrada
 m = folium.Map(
     location=[21.8853, -102.2916], 
     zoom_start=12, 
-    tiles="CartoDB dark_matter"
+    tiles=f"https://{['a','b','c','d'][0]}.basemaps.cartocdn.com/dark_all/{{z}}/{{x}}/{{y}}{{r}}.png?api_key={CARTODB_API_KEY}",
+    attr='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
 )
 
 # Cargar sectores e iterar correctamente sobre los resultados
