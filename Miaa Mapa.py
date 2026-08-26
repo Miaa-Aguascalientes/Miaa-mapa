@@ -291,9 +291,11 @@ st.title("🗺️ Monitoreo Operativo: Colonias, Pozos e Incidencias")
 
 m = folium.Map(location=[21.8853, -102.2916], zoom_start=12, tiles=None)
 
-# Integración de la capa CartoDB Dark con tu API Key y Pantalla Completa
+# 2. Capas de Fondo (Vista Nocturna)
+api_key = "cb1_26ji_1_864817f3cb73c0bdbe0daccd"
+    
 folium.TileLayer(
-    tiles="https://{s}.basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}.png?key=PON_AQUI_TU_API_KEY",
+    tiles=f"https://{{s}}.basemaps.cartocdn.com/rastertiles/dark_all/{{z}}/{{x}}/{{y}}.png?key={api_key}",
     name="Vista Nocturna",
     attr='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
     subdomains="abcd",
