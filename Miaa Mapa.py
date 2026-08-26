@@ -1,3 +1,4 @@
+import streamlit as st
 import json
 import geopandas as gpd
 import pandas as pd
@@ -7,7 +8,7 @@ import psycopg2
 import urllib.parse
 from shapely import wkt
 
-# Configuración de la página
+# Configuración de la página (DEBE ser la primera instrucción de Streamlit)
 st.set_page_config(
     page_title="MIAA - Mapa SCADA", 
     page_icon="https://www.miaa.mx/favicon.ico", 
