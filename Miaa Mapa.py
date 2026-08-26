@@ -142,8 +142,9 @@ Fullscreen(position="topright").add_to(m)
 MousePosition().add_to(m)
 LocateControl(position="topleft").add_to(m)
 
-# Cargar y pintar sectores en el mapa
-sectores = cargar_sectores_poligonosfor sec in sectores:
+# Cargar y pintar sectores en el mapa (CORREGIDO)
+sectores = cargar_sectores_poligonos()
+for sec in sectores:
     try:
         geo_data = json.loads(sec['geo'])
         folium.GeoJson(
