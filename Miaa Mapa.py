@@ -98,30 +98,6 @@ def cargar_datos_scada(lista_tags):
         return {}
 
 @st.cache_data(ttl=3600)
-def cargar_sectores_poligonos():
-    conn = get_postgres_conn()
-    if not conn: return []
-    try:
-        query = """
-            SELECT sector, "Pozos_Sector", 
-                   "Superficie", "Long_Red", "Vol_Prod", "U_Domesticos", 
-                   "U_NoDom", "U_Tot", "Poblacion", "Cons_m3", 
-                   "Faltas_Agua", "Fugas_Tot", "FTC", "FTA", 
-                   "Vol_Medid", "Vol_Fact", "Kwh", "costoKw-hr", 
-                   "Recaudacion", "Dotacion", "Balance_Estimado",
-                   ST_AsGeoJSON(ST_Transform(geom, 4326)) as geo 
-            FROM "Sectorizacion"."Sectores_hidr"
-        """
-        df = pd.read_sql(query, conn)
-        return df.to_dict('records')
-    except Exception as e:
-        st.error(f"Error al cargar sectores: {e}")
-        return []
-    finally:
-        if conn:
-            conn.close()
-
-@st.cache_data(ttl=3600)
 def get_todas_las_colonias():
     query = """
         SELECT ST_AsText(geom) as geom_wkt, Pozos, Col_atl, Sector, Distrito, Supervisor,
@@ -194,19 +170,16 @@ def calcular_color_colonia(props, pozos_con_incidencia):
                         pass
 
     if not tiene_incidencia_activa:
-        return '#3498DB', 0  # Azul para colonias sin afectación activa
-
-    if tiene_incidencia_activa and suma_afectacion == 0:
-        return '#FFA500', 1  
+        return '#3498DB', 0
 
     if 76 <= suma_afectacion <= 100:
-        return '#FF0000', suma_afectacion  # Rojo
+        return '#FF0000', suma_afectacion
     elif 51 <= suma_afectacion <= 75:
-        return '#FFFF00', suma_afectacion  # Amarillo
+        return '#FFFF00', suma_afectacion
     elif 31 <= suma_afectacion <= 50:
-        return '#FFA500', suma_afectacion  # Naranja
+        return '#FFA500', suma_afectacion
     elif 1 <= suma_afectacion <= 30:
-        return '#69ADDD', suma_afectacion  # Azul claro / Naranja bajito
+        return '#69ADDD', suma_afectacion
     else:
         return '#FF0000', suma_afectacion
 
@@ -305,36 +278,62 @@ st.markdown("""
 
 st.title("🗺️ Monitoreo Operativo: Colonias, Pozos e Incidencias")
 
-# Crear el mapa base centrado en Aguascalientes
 m = folium.Map(location=[21.8853, -102.2916], zoom_start=12, tiles='CartoDB dark_matter')
 
-# 1. Dibujar Capa de Colonias y su afectación por incidencias
+# 1. Dibujar Capa de Colonias con Popup Detallado
 gdf_colonias = get_todas_las_colonias()
 if gdf_colonias is not None and not gdf_colonias.empty:
     for _, row in gdf_colonias.iterrows():
         props = row.to_dict()
         color_colonia, afec_val = calcular_color_colonia(props, pozos_con_incidencia)
         
-        # Filtrar para mostrar solo colonias con incidencia activa o mantener estructura completa
+        # Construir detalle de pozos asociados e incidencias para el popup
+        pozos_str = props.get('Pozos', 'N/A')
+        sector_val = props.get('Sector', 'N/A')
+        distrito_val = props.get('Distrito', 'N/A')
+        col_atl = props.get('Col_atl', 'N/A')
+        
+        incidencias_colonia_html = ""
+        for i in range(1, 11):
+            p_val = props.get(f'Pozo_{i}')
+            af_val = props.get(f'Afectacion_{i}')
+            if p_val:
+                p_limpio = str(p_val).strip().upper()
+                if p_limpio in pozos_con_incidencia:
+                    incidencias_colonia_html += f"<br>&nbsp;&nbsp;• <b>{p_limpio}:</b> {pozos_con_incidencia[p_limpio]} ({af_val}%)"
+
+        popup_html = f"""
+        <div style="font-family: sans-serif; font-size: 12px; color: #000; min-width: 220px;">
+            <b>Colonia:</b> {col_atl}<br>
+            <b>Pozos:</b> {pozos_str}<br>
+            <b>Sector:</b> {sector_val}<br>
+            <b>Distrito:</b> {distrito_val}
+            {f"<br><b>Incidencias:</b> {incidencias_colonia_html}" if incidencias_colonia_html else ""}
+            <br><b>Afectación Total:</b> {afec_val}%
+        </div>
+        """
+
         folium.GeoJson(
             row['geometry'].__geo_interface__,
             style_function=lambda x, col=color_colonia: {
                 'fillColor': col,
-                'color': '#ffffff',
+                'color': '#2980B9',
                 'weight': 1,
-                'fillOpacity': 0.45 if col != '#3498DB' else 0.15
+                'fillOpacity': 0.25 if col == '#3498DB' else 0.55
             },
-            tooltip=folium.Tooltip(f"<b>Colonia:</b> {props.get('Col_atl', 'N/A')}<br><b>Sector:</b> {props.get('Sector', 'N/A')}<br><b>Afectación:</b> {afec_val}%")
+            popup=folium.Popup(popup_html, max_width=300),
+            tooltip=f"<b>Colonia:</b> {col_atl} | Afectación: {afec_val}%"
         ).add_to(m)
 
-# 2. Dibujar Pozos con sus colores requeridos (Verde, Rojo, Gris, Naranja)[cite: 6]
+# 2. Dibujar Pozos, Etiquetas de Número y Alerta de Incidencia Registrada
 for id_p, info in mapa_pozos_dict.items():
     coord = info.get('coord')
     if coord:
         color_pozo = info.get('color_final', '#808080')
+        
         folium.CircleMarker(
             location=coord,
-            radius=6,
+            radius=5,
             color=color_pozo,
             fill=True,
             fill_color=color_pozo,
@@ -342,6 +341,33 @@ for id_p, info in mapa_pozos_dict.items():
             popup=folium.Popup(f"<b>Pozo:</b> {id_p}<br><b>Estado:</b> {info.get('status_label')}", max_width=300),
             tooltip=f"Pozo: {id_p} ({info.get('status_label')})"
         ).add_to(m)
+        
+        # Verificar si el pozo tiene una incidencia activa registrada hoy para mostrar la etiqueta flotante
+        id_limpio = str(id_p).strip().upper()
+        incidencia_texto = pozos_con_incidencia.get(id_limpio)
+        
+        if incidencia_texto:
+            # Etiqueta flotante avanzada con estilo de alerta (Llave inglesa + Diagnóstico)
+            html_etiqueta = f"""
+                <div style="background-color: #C0392B; color: #FFFFFF; padding: 3px 6px; border-radius: 4px; font-size: 10px; font-weight: bold; display: inline-flex; align-items: center; box-shadow: 2px 2px 5px rgba(0,0,0,0.5); white-space: nowrap; border: 1px solid #FFF;">
+                    <span style="margin-right: 4px;">🔧</span> {id_p}: {incidencia_texto}
+                </div>
+            """
+            folium.marker.Marker(
+                location=coord,
+                icon=folium.DivIcon(html=html_etiqueta, icon_size=(150, 30), icon_anchor=(-10, 15))
+            ).add_to(m)
+        else:
+            # Etiqueta simple con el número del pozo al lado
+            html_etiqueta = f"""
+                <div style="font-size: 10px; font-weight: bold; color: #FFFFFF; text-shadow: 1px 1px 2px #000000; white-space: nowrap;">
+                    {id_p}
+                </div>
+            """
+            folium.marker.Marker(
+                location=coord,
+                icon=folium.DivIcon(html=html_etiqueta, icon_size=(50, 20), icon_anchor=(-8, 8))
+            ).add_to(m)
 
 # Renderizar el mapa en Streamlit
 st_folium(m, width="100%", height=700)
