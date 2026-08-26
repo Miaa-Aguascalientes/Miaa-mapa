@@ -287,7 +287,6 @@ if gdf_colonias is not None and not gdf_colonias.empty:
         props = row.to_dict()
         color_colonia, afec_val = calcular_color_colonia(props, pozos_con_incidencia)
         
-        # Construir detalle de pozos asociados e incidencias para el popup
         pozos_str = props.get('Pozos', 'N/A')
         sector_val = props.get('Sector', 'N/A')
         distrito_val = props.get('Distrito', 'N/A')
@@ -308,8 +307,8 @@ if gdf_colonias is not None and not gdf_colonias.empty:
             <b>Pozos:</b> {pozos_str}<br>
             <b>Sector:</b> {sector_val}<br>
             <b>Distrito:</b> {distrito_val}
-            {f"<br><b>Incidencias:</b> {incidencias_colonia_html}" if incidencias_colonia_html else ""}
-            <br><b>Afectación Total:</b> {afec_val}%
+            {f"<br><b>Incidencia:</b> {incidencias_colonia_html}" if incidencias_colonia_html else ""}
+            <br><b>Afectación:</b> {afec_val}%
         </div>
         """
 
@@ -342,29 +341,26 @@ for id_p, info in mapa_pozos_dict.items():
             tooltip=f"Pozo: {id_p} ({info.get('status_label')})"
         ).add_to(m)
         
-        # Verificar si el pozo tiene una incidencia activa registrada hoy para mostrar la etiqueta flotante
         id_limpio = str(id_p).strip().upper()
         incidencia_texto = pozos_con_incidencia.get(id_limpio)
         
         if incidencia_texto:
-            # Etiqueta flotante avanzada con estilo de alerta (Llave inglesa + Diagnóstico)
             html_etiqueta = f"""
                 <div style="background-color: #C0392B; color: #FFFFFF; padding: 3px 6px; border-radius: 4px; font-size: 10px; font-weight: bold; display: inline-flex; align-items: center; box-shadow: 2px 2px 5px rgba(0,0,0,0.5); white-space: nowrap; border: 1px solid #FFF;">
                     <span style="margin-right: 4px;">🔧</span> {id_p}: {incidencia_texto}
                 </div>
             """
-            folium.marker.Marker(
+            folium.Marker(
                 location=coord,
                 icon=folium.DivIcon(html=html_etiqueta, icon_size=(150, 30), icon_anchor=(-10, 15))
             ).add_to(m)
         else:
-            # Etiqueta simple con el número del pozo al lado
             html_etiqueta = f"""
                 <div style="font-size: 10px; font-weight: bold; color: #FFFFFF; text-shadow: 1px 1px 2px #000000; white-space: nowrap;">
                     {id_p}
                 </div>
             """
-            folium.marker.Marker(
+            folium.Marker(
                 location=coord,
                 icon=folium.DivIcon(html=html_etiqueta, icon_size=(50, 20), icon_anchor=(-8, 8))
             ).add_to(m)
