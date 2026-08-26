@@ -1,91 +1,82 @@
 import streamlit as st
+import pandas as pd
 import folium
 from streamlit_folium import st_folium
+import psycopg2
+import urllib.parse
+from shapely import wkt
 import geopandas as gpd
-import pandas as pd
 
-def render_mapa_scada(df_pozos, df_tanques, gdf_sectores, gdf_colonias):
-    """
-    Renderiza el mapa interactivo de telemetría e infraestructura de MIAA.
-    """
-    st.subheader("🗺️ Monitoreo Geoespacial - Red Hidráulica")
+# Configuración de la página
+st.set_page_config(
+    page_title="MIAA - Mapa SCADA", 
+    page_icon="https://www.miaa.mx/favicon.ico", 
+    layout="wide",
+    initial_sidebar_state="collapsed"
+)
 
-    # Coordenadas centrales de Aguascalientes
-    lat_centro, lon_centro = 21.88234, -102.28259
-    
-    # Inicializar mapa base con tema oscuro o estándar
-    m = folium.Map(
-        location=[lat_centro, lon_centro],
-        zoom_start=12,
-        tiles="CartoDB positron"
-    )
+# Ocultar elementos de Streamlit para dejar exclusivamente el mapa
+st.markdown("""
+    <style>
+        #MainMenu {visibility: hidden;}
+        footer {visibility: hidden;}
+        header {visibility: hidden;}
+        .stApp { margin: 0; padding: 0; top: 0; bottom: 0; left: 0; right: 0; }
+        .block-container { padding: 0 !important; margin: 0 !important; max-width: 100% !important; height: 100vh !important; }
+        iframe { width: 100vw; height: 100vh; border: none; }
+    </style>
+""", unsafe_allow_html=True)
 
-    # 1. Capa de Sectores Hidráulicos
-    if not gdf_sectores.empty:
-        folium.GeoJson(
-            gdf_sectores,
-            name="Sectores Hidráulicos",
-            style_function=lambda x: {
-                'fillColor': '#3182bd',
-                'color': '#08519c',
-                'weight': 1.5,
-                'fillOpacity': 0.1
-            }
-        ).add_to(m)
+@st.cache_resource
+def get_postgres_conn():
+    try: 
+        conn = psycopg2.connect(**st.secrets["postgres"])
+        return conn
+    except Exception as e: 
+        return None
 
-    # 2. Capa de Colonias (Afectaciones / Estados)
-    if not gdf_colonias.empty:
-        folium.GeoJson(
-            gdf_colonias,
-            name="Colonias",
-            style_function=lambda x: {
-                'fillColor': '#de2d26' if x['properties'].get('afectado', False) else '#74c476',
-                'color': '#252525',
-                'weight': 1,
-                'fillOpacity': 0.4
-            },
-            tooltip=folium.GeoJsonTooltip(fields=['nombre'], aliases=['Colonia:'])
-        ).add_to(m)
-
-    # 3. Marcadores de Pozos
-    fg_pozos = folium.FeatureGroup(name="Pozos")
-    for _, row in df_pozos.iterrows():
-        color_pozo = "red" if row.get('estatus', 1) == 0 else "green"
-        popup_html = f"""
-        <b>Pozo:</b> {row.get('nombre', 'N/D')}<br>
-        <b>Estatus:</b> {'Operando' if color_pozo == 'green' else 'Detenido'}<br>
-        <b>Caudal:</b> {row.get('caudal', 0)} lps<br>
-        <b>Presión:</b> {row.get('presion', 0)} kg/cm²
+# Cargar sectores y geometrías para mostrar en el mapa
+@st.cache_data(ttl=3600)
+def cargar_sectores_poligonos():
+    conn = get_postgres_conn()
+    if not conn: return []
+    try:
+        query = """
+            SELECT sector, ST_AsGeoJSON(ST_Transform(geom, 4326)) as geo 
+            FROM "Sectorizacion"."Sectores_hidr"
         """
-        folium.CircleMarker(
-            location=[row['lat'], row['lon']],
-            radius=6,
-            color=color_pozo,
-            fill=True,
-            fill_color=color_pozo,
-            fill_opacity=0.8,
-            popup=folium.Popup(popup_html, max_width=300)
-        ).add_to(fg_pozos)
-    fg_pozos.add_to(m)
+        df = pd.read_sql(query, conn)
+        return df.to_dict('records')
+    except Exception:
+        return []
+    finally:
+        if conn:
+            conn.close()
 
-    # 4. Marcadores de Tanques
-    fg_tanques = folium.FeatureGroup(name="Tanques")
-    for _, row in df_tanques.iterrows():
-        popup_html = f"""
-        <b>Tanque:</b> {row.get('nombre', 'N/D')}<br>
-        <b>Nivel Actual:</b> {row.get('nivel', 0)} m<br>
-        <b>Porcentaje:</b> {row.get('porcentaje', 0)}%
-        """
-        folium.Marker(
-            location=[row['lat'], row['lon']],
-            icon=folium.Icon(color="blue", icon="tint", prefix="fa"),
-            popup=folium.Popup(popup_html, max_width=300)
-        ).add_to(fg_tanques)
-    fg_tanques.add_to(m)
+# Crear mapa centrado en Aguascalientes
+m = folium.Map(
+    location=[21.8853, -102.2916], 
+    zoom_start=12, 
+    tiles="CartoDB dark_matter"
+)
 
-    # Control de capas
-    folium.LayerControl().add_to(m)
+# Añadir polígonos de sectores si están disponibles
+sectores = cargar_sectores_poligonosfor sec in sectores:
+    try:
+        if sec.get('geo'):
+            geo_json = json.loads(sec['geo'])
+            folium.GeoJson(
+                geo_json,
+                style_function=lambda x: {
+                    'fillColor': '#3498DB',
+                    'color': '#2980B9',
+                    'weight': 1.5,
+                    'fillOpacity': 0.1
+                },
+                tooltip=f"Sector: {sec.get('sector')}"
+            ).add_to(m)
+    except Exception:
+        continue
 
-    # Renderizar componente en Streamlit
-    st_data = st_folium(m, width="100%", height=600)
-    return st_data
+# Renderizar exclusivamente el mapa ocupando todo el espacio disponible
+st_folium(m, width="100%", height=850, use_container_width=True)
