@@ -1,11 +1,11 @@
-import streamlit as st
+import json
+import geopandas as gpd
 import pandas as pd
 import folium
 from streamlit_folium import st_folium
 import psycopg2
 import urllib.parse
 from shapely import wkt
-import geopandas as gpd
 
 # Configuración de la página
 st.set_page_config(
@@ -60,8 +60,11 @@ m = folium.Map(
     tiles="CartoDB dark_matter"
 )
 
-# Añadir polígonos de sectores si están disponibles
-sectores = cargar_sectores_poligonosfor sec in sectores:
+# Cargar sectores e iterar correctamente sobre los resultados
+sectores = cargar_sectores_poligonos()
+
+# Añadir polígonos de sectores al mapa
+for sec in sectores:
     try:
         if sec.get('geo'):
             geo_json = json.loads(sec['geo'])
