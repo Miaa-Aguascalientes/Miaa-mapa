@@ -13,7 +13,7 @@ from datetime import datetime
 # --- CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(
     page_title="MIAA - Mapa de Pozos y Colonias", 
-    page_icon="https://www.miaa.mx/favicon.ico", 
+    page_icon="[https://www.miaa.mx/favicon.ico](https://www.miaa.mx/favicon.ico)", 
     layout="wide",
     initial_sidebar_state="collapsed"
 )
@@ -206,4 +206,3 @@ for nombre_pozo, info in pozos_dict.items():
 # Renderizar mapa en Streamlit
 st.markdown("### Mapa de Pozos y Colonias con Incidencias")
 st_map = st_folium(m, width="100%", height=750)
-```[cite: 3]
