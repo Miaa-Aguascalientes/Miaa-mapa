@@ -8,12 +8,11 @@ from sqlalchemy import create_engine
 import psycopg2
 from shapely import wkt
 import re
-from datetime import datetime
 
 # --- CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(
-    page_title="MIAA - Mapa de Pozos y Colonias", 
-    page_icon="[https://www.miaa.mx/favicon.ico](https://www.miaa.mx/favicon.ico)", 
+    page_title="MIAA - Mapa de Operación y SCADA", 
+    page_icon="https://www.miaa.mx/favicon.ico", 
     layout="wide",
     initial_sidebar_state="collapsed"
 )
@@ -141,38 +140,43 @@ def calcular_color_colonia(props, pozos_con_incidencia):
                         pass
 
     if not tiene_incidencia_activa:
-        return '#3498DB', 0  # Azul para colonias sin afectación activa
+        return '#00B4D8', 0  # Azul estilo interfaz SCADA
 
     if tiene_incidencia_activa and suma_afectacion == 0:
-        return '#FFA500', 1  
+        return '#FF8800', 1  
 
     if 76 <= suma_afectacion <= 100:
-        return '#FF0000', suma_afectacion  # Rojo
+        return '#FF0033', suma_afectacion  # Rojo alerta alta
     elif 51 <= suma_afectacion <= 75:
-        return '#FFFF00', suma_afectacion  # Amarillo
+        return '#FFCC00', suma_afectacion  # Amarillo
     elif 31 <= suma_afectacion <= 50:
-        return '#FFA500', suma_afectacion  # Naranja
+        return '#FF8800', suma_afectacion  # Naranja
     elif 1 <= suma_afectacion <= 30:
-        return '#69ADDD', suma_afectacion  # Azul claro
+        return '#0077B6', suma_afectacion  
     else:
-        return '#FF0000', suma_afectacion
+        return '#FF0033', suma_afectacion
 
-# --- CREACIÓN DEL MAPA ---
-m = folium.Map(location=[21.8853, -102.2916], zoom_start=12, tiles='CartoDB dark_matter')
+# --- CREACIÓN DEL MAPA ESTILO OSCURO (CartoDB dark_matter) ---
+m = folium.Map(location=[21.8853, -102.2916], zoom_start=13, tiles='CartoDB dark_matter')
 
-# 1. Capa de Colonias con polígonos pintados por incidencia
+# Grupos de Capas (LayerControl interactivo)
+capa_colonias = folium.FeatureGroup(name='Colonias', show=True)
+capa_pozos = folium.FeatureGroup(name='Pozos', show=True)
+capa_etiquetas = folium.FeatureGroup(name='Etiquetas de Incidencias', show=True)
+
 gdf_colonias = get_todas_las_colonias()
 pozos_incidencias = obtener_pozos_con_incidencias_hoy()
 
+# 1. Añadir Capa de Colonias
 if gdf_colonias is not None:
     def style_function(feature):
         props = feature['properties']
-        color, suma_afec = calcular_color_colonia(props, pozos_incidencias)
+        color, _ = calcular_color_colonia(props, pozos_incidencias)
         return {
             'fillColor': color,
-            'color': color,
-            'weight': 1,
-            'fillOpacity': 0.4
+            'color': '#0099FF',
+            'weight': 0.8,
+            'fillOpacity': 0.25
         }
 
     folium.GeoJson(
@@ -183,26 +187,70 @@ if gdf_colonias is not None:
             aliases=['Colonia:', 'Sector:', 'Supervisor:'],
             localize=True
         )
-    ).add_to(m)
+    ).add_to(capa_colonias)
 
-# 2. Capa de Pozos
+# 2. Añadir Capa de Pozos y Etiquetas Flotantes Estilo SCADA
 pozos_dict = cargar_mapa_pozos_desde_db()
 for nombre_pozo, info in pozos_dict.items():
     coord = info.get("coord")
     if coord:
         tiene_inc = nombre_pozo in pozos_incidencias or nombre_pozo.replace('-', '') in [p.replace('-', '') for p in pozos_incidencias]
-        color_pozo = 'red' if tiene_inc else 'blue'
+        diagnostico_texto = pozos_incidencias.get(nombre_pozo, pozos_incidencias.get(nombre_pozo.replace('-', ''), "INCIDENCIA ACTIVA"))
         
+        color_punto = '#FF0033' if tiene_inc else '#00FF66'  # Verde brillante para pozos normales, rojo para incidencias
+        
+        # Marcador del pozo
         folium.CircleMarker(
             location=coord,
-            radius=5,
-            color=color_pozo,
+            radius=4,
+            color=color_punto,
             fill=True,
-            fill_color=color_pozo,
-            fill_opacity=0.8,
-            popup=f"<b>Pozo:</b> {nombre_pozo}<br><b>Estado:</b> {'Con Incidencia' if tiene_inc else 'Operando'}"
-        ).add_to(m)
+            fill_color=color_punto,
+            fill_opacity=0.9,
+            popup=f"<b>Pozo:</b> {nombre_pozo}<br><b>Estado:</b> {'Con Incidencia: ' + diagnostico_texto if tiene_inc else 'Operando Normal'}"
+        ).add_to(capa_pozos)
+        
+        # Etiqueta de texto verde con el nombre del pozo al lado (Estilo de la interfaz)
+        folium.Marker(
+            location=coord,
+            icon=folium.DivIcon(
+                html=f'<div style="font-size: 9pt; color: #00FF66; font-weight: bold; text-shadow: 1px 1px 2px black; white-space: nowrap; transform: translate(8px, -10px);">{nombre_pozo}</div>'
+            )
+        ).add_to(capa_pozos)
 
-# Renderizar mapa en Streamlit
-st.markdown("### Mapa de Pozos y Colonias con Incidencias")
-st_map = st_folium(m, width="100%", height=750)
+        # Si tiene incidencia activa, crear la caja flotante roja distintiva (como en la foto de referencia)
+        if tiene_inc:
+            html_etiqueta_alerta = f"""
+            <div style="
+                background-color: #111111; 
+                border: 2px solid #FF0033; 
+                color: white; 
+                padding: 3px 8px; 
+                border-radius: 4px; 
+                font-family: sans-serif; 
+                font-size: 10px; 
+                font-weight: bold;
+                box-shadow: 0px 0px 8px rgba(255, 0, 51, 0.8);
+                white-space: nowrap;
+            ">
+                <span style="color: #FF0033; margin-right: 4px;">🔧</span> 
+                <span style="color: #FFFFFF; margin-right: 6px;">{nombre_pozo}</span> 
+                <span style="background-color: #FF0033; color: white; padding: 1px 4px; border-radius: 2px;">{diagnostico_texto.upper()}</span>
+            </div>
+            """
+            folium.Marker(
+                location=[coord[0] + 0.0012, coord[1] + 0.0015], # Desplazado ligeramente para no tapar el punto
+                icon=folium.DivIcon(html=html_etiqueta_alerta)
+            ).add_to(capa_etiquetas)
+
+# Agregar capas al mapa
+capa_colonias.add_to(m)
+capa_pozos.add_to(m)
+capa_etiquetas.add_to(m)
+
+# Control de capas en la esquina superior derecha (idéntico a la referencia)
+folium.LayerControl(collapsed=False).add_to(m)
+
+# Renderizar en Streamlit
+st.markdown("### Centro de Monitoreo MIAA - Estado General de Red")
+st_map = st_folium(m, width="100%", height=780)
